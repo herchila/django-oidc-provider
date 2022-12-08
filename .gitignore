@@ -7,7 +7,7 @@ dist/
 .tox
 .coverage
 src/
-.venv
+.venv*
 .idea
 docs/_build/
 .eggs/
