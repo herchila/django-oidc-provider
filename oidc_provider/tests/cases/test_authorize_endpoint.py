@@ -22,12 +22,12 @@ try:
     from django.urls import reverse
 except ImportError:
     from django.core.urlresolvers import reverse
+import jwt
 from django.contrib.auth.models import AnonymousUser
 from django.core.management import call_command
 from django.test import RequestFactory
 from django.test import TestCase
 from django.test import override_settings
-from jwkest.jwt import JWT
 
 from oidc_provider import settings
 from oidc_provider.lib.endpoints.authorize import AuthorizeEndpoint
@@ -583,6 +583,26 @@ class AuthorizationCodeFlowTestCase(TestCase, AuthorizeEndpointMixin):
         self.assertIn("none", strip_prompt_login(path3))
         self.assertNotIn("login", strip_prompt_login(path3))
 
+    def test_client_id_with_null_char_are_rejected(self):
+        """
+        Test that client_id parameters containing unexpected characters and
+        are properly sanitized and to not cause database errors.
+        """
+        data = {
+            "client_id": "Hello\0World",
+            "response_type": next(self.client_code.response_type_values()),
+            "redirect_uri": self.client_code.default_redirect_uri,
+            "scope": "openid email",
+            "state": self.state,
+            "prompt": "none",
+        }
+
+        response = self._auth_request("get", data)
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertIn("Client ID Error", response.content.decode("utf-8"))
+
 
 class AuthorizationImplicitFlowTestCase(TestCase, AuthorizeEndpointMixin):
     """
@@ -704,7 +724,7 @@ class AuthorizationImplicitFlowTestCase(TestCase, AuthorizeEndpointMixin):
         # obtain `id_token` portion of Location
         components = urlsplit(response["Location"])
         fragment = parse_qs(components[4])
-        id_token = JWT().unpack(fragment["id_token"][0].encode("utf-8")).payload()
+        id_token = jwt.decode(fragment["id_token"][0], options={"verify_signature": False})
 
         self.assertIn("at_hash", id_token)
 
@@ -730,7 +750,7 @@ class AuthorizationImplicitFlowTestCase(TestCase, AuthorizeEndpointMixin):
         # obtain `id_token` portion of Location
         components = urlsplit(response["Location"])
         fragment = parse_qs(components[4])
-        id_token = JWT().unpack(fragment["id_token"][0].encode("utf-8")).payload()
+        id_token = jwt.decode(fragment["id_token"][0], options={"verify_signature": False})
 
         self.assertNotIn("at_hash", id_token)
 
